@@ -1,0 +1,19 @@
+---
+    
+- hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - moscow_region
+        
+- hosts: cloud_client
+  become: true
+  gather_facts: true
+  roles:
+    - role: cron_copy_files
+
+- hosts: test1
+  become: yes
+  gather_facts: true
+  roles:
+    - open_ports
