@@ -1,0 +1,35 @@
+---
+- hosts: all
+  become: yes
+  vars:
+    username: superuser
+    ssh_key_file: "~/.ssh/id_rsa.pub"
+  tasks:
+    - name: apt update
+      apt:
+        update_cache: yes
+      tags: package_update
+
+    - name: create the '{{ username }}' user
+      user: name={{ username }} append=yes state=present createhome=yes shell=/bin/bash
+      tags: user_management
+
+    - name: allow '{{ username }}' to have passwordless sudo
+      lineinfile:
+        dest: /etc/sudoers
+        line: '{{ username }} ALL=(ALL) NOPASSWD: ALL'
+        validate: 'visudo -cf %s'
+      tags: sudo_configuration
+
+    - name: check if SSH key file exists
+      stat:
+        path: "{{ ssh_key_file }}"
+      register: ssh_key_result
+      failed_when: ssh_key_result.stat.exists == False
+      delegate_to: localhost
+      run_once: true
+
+    - name: set up authorized keys for the '{{ username }}' user
+      authorized_key: user={{ username }} key="{{ lookup('file', ssh_key_file) }}"
+      when: ssh_key_result.stat.exists
+      tags: ssh_keys
