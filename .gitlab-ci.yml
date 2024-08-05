@@ -1,0 +1,60 @@
+stages: 
+  - build
+  - init
+  - deploy 
+
+variables:
+  DOCKER_ANSIBLE_IMAGE: "${CI_REGISTRY}/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}/ansible:latest"
+  PORT: 22
+
+build_ansible:
+  image: docker:stable
+  stage: build
+  tags:
+    - linux
+  only:
+    refs:
+      - master
+    changes:
+      - build/**/*
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY --username $CI_REGISTRY_USER --password-stdin
+  script:
+    - cd build/ansible
+    - docker build -t ${DOCKER_ANSIBLE_IMAGE} .
+    - docker push ${DOCKER_ANSIBLE_IMAGE}
+
+add_user:
+  stage: init
+  tags:
+    - linux
+  only:
+    refs:
+      - master
+  script:
+    - sshpass -p $PASSWORD ssh-copy-id -p $PORT $USER@$IP
+    - ansible-playbook initial_user.yml -i $IP:$PORT, --user=$USER --extra-vars "ansible_sudo_pass=$PASSWORD"
+
+.deploy_abstr: 
+  image: ${DOCKER_ANSIBLE_IMAGE}
+  stage: deploy
+  when: manual
+  only:
+    refs:
+      - master
+  cache:
+    key: ansible-roles-build
+    paths:
+      - .ansible/roles
+  variables:
+    ANSIBLE_ROLES_PATH: .ansible/roles
+  tags:
+    - linux
+  script:
+    - ansible-galaxy install -r requirements.yml
+    - ansible-playbook $FILE_ANS -i hosts --extra-vars "privatekey_passphrase=${PASSPHRASE}"
+
+general_deploy_job:
+  extends: .deploy_abstr
+  variables:
+    FILE_ANS: master.yml
